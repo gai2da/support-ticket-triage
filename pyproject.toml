@@ -1,0 +1,18 @@
+[project]
+name = "support-ticket-triage"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.138.0",
+    "ipykernel>=7.3.0",
+    "jupyter>=1.1.1",
+    "matplotlib>=3.11.0",
+    "mlflow>=3.14.0",
+    "numpy>=2.5.0",
+    "pandas>=2.3.3",
+    "scikit-learn>=1.9.0",
+    "seaborn>=0.13.2",
+    "uvicorn>=0.49.0",
+]
