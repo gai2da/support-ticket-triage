@@ -10,7 +10,6 @@ An end-to-end ML pipeline for analyzing customer support interactions on Twitter
 ## Dataset
 Twitter Customer Support Dataset (Kaggle) — 2.8M real tweets between customers and 108 companies (Oct-Dec 2017).
 
-Original dataset tried: Customer Support Ticket Dataset (Kaggle, 8,470 records) — abandoned after baseline models achieved ~24% accuracy on 4 classes (equivalent to random guessing), caused by randomly assigned labels and templated descriptions with no real signal.
 
 ## Setup
 ```bash
