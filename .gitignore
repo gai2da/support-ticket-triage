@@ -6,3 +6,5 @@ __pycache__/
 mlruns/
 *.egg-info/
 .envmlruns.db
+notebooks/eda copy.ipynb
+notebooks/.ipynb_checkpoints
