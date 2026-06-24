@@ -72,10 +72,18 @@ cd support-ticket-triage
 uv sync
 ```
  
+
 ## Run API
  
 ```bash
 uv run uvicorn src.api.main:app --reload
+```
+
+## Docker
+
+```bash
+docker build -t support-triage .
+docker run -p 8000:8000 support-triage
 ```
  
 ## Milestones

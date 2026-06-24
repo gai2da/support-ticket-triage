@@ -1,3 +1,5 @@
+import os
+import pickle
 import pandas as pd
 import numpy as np
 import mlflow
@@ -7,14 +9,22 @@ from sklearn.linear_model import LogisticRegression, SGDClassifier, Ridge
 from sklearn.metrics import accuracy_score, f1_score, mean_absolute_error, mean_squared_error, r2_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
-from sklearn.linear_model import SGDClassifier
 from scipy.sparse import hstack, csr_matrix
+
+MODELS_DIR = "models"
 
 
 def load_data(train_path, val_path):
     train_df = pd.read_csv(train_path)
     val_df = pd.read_csv(val_path)
     return train_df, val_df
+
+
+def save_model(model, filename):
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    path = os.path.join(MODELS_DIR, filename)
+    with open(path, "wb") as f:
+        pickle.dump(model, f)
 
 
 def train_sentiment_lr(train_df, val_df, max_features=5000, C=1.0):
@@ -46,6 +56,7 @@ def train_sentiment_lr(train_df, val_df, max_features=5000, C=1.0):
         mlflow.log_metric("f1_negative", f1_neg)
         mlflow.sklearn.log_model(pipeline, "model")
 
+    save_model(pipeline, "sentiment_model.pkl")
     return pipeline
 
 
@@ -152,6 +163,7 @@ def train_response_time_ridge_onehot(train_df, val_df, max_features=5000, alpha=
         mlflow.log_metric("r2", r2)
         mlflow.log_metric("mae_minutes", mae_real)
 
+    save_model({"model": reg, "tfidf": tfidf, "ohe": ohe}, "regression_model.pkl")
     return reg, tfidf, ohe
 
 

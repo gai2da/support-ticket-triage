@@ -10,3 +10,4 @@ mlruns.db
 notebooks/eda copy.ipynb
 notebooks/.ipynb_checkpoints
 notebooks/modelinsg.ipynb
+models/
