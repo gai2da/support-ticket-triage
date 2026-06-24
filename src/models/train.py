@@ -1,5 +1,6 @@
 import os
 import pickle
+import yaml
 import pandas as pd
 import numpy as np
 import mlflow
@@ -11,7 +12,15 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 from scipy.sparse import hstack, csr_matrix
 
-MODELS_DIR = "models"
+with open("config.yaml") as f:
+    config = yaml.safe_load(f)
+
+MODELS_DIR = config["data"]["models_dir"]
+MAX_FEATURES = config["model"]["classification"]["max_features"]
+C = config["model"]["classification"]["C"]
+ALPHA = config["model"]["regression"]["alpha"]
+TRACKING_URI = config["mlflow"]["tracking_uri"]
+EXPERIMENT_NAME = config["mlflow"]["experiment_name"]
 
 
 def load_data(train_path, val_path):
@@ -27,7 +36,7 @@ def save_model(model, filename):
         pickle.dump(model, f)
 
 
-def train_sentiment_lr(train_df, val_df, max_features=5000, C=1.0):
+def train_sentiment_lr(train_df, val_df):
     X_train = train_df["customer_text_clean"].fillna("").astype(str)
     X_val = val_df["customer_text_clean"].fillna("").astype(str)
     y_train = train_df["sentiment"]
@@ -35,12 +44,12 @@ def train_sentiment_lr(train_df, val_df, max_features=5000, C=1.0):
 
     with mlflow.start_run(run_name="logistic_regression"):
         mlflow.log_param("model", "LogisticRegression")
-        mlflow.log_param("max_features", max_features)
+        mlflow.log_param("max_features", MAX_FEATURES)
         mlflow.log_param("C", C)
         mlflow.log_param("class_weight", "balanced")
 
         pipeline = Pipeline([
-            ("tfidf", TfidfVectorizer(max_features=max_features)),
+            ("tfidf", TfidfVectorizer(max_features=MAX_FEATURES)),
             ("clf", LogisticRegression(C=C, max_iter=1000, class_weight="balanced", random_state=42))
         ])
 
@@ -60,7 +69,7 @@ def train_sentiment_lr(train_df, val_df, max_features=5000, C=1.0):
     return pipeline
 
 
-def train_sentiment_sgd(train_df, val_df, max_features=5000):
+def train_sentiment_sgd(train_df, val_df):
     X_train = train_df["customer_text_clean"].fillna("").astype(str)
     X_val = val_df["customer_text_clean"].fillna("").astype(str)
     y_train = train_df["sentiment"]
@@ -68,12 +77,12 @@ def train_sentiment_sgd(train_df, val_df, max_features=5000):
 
     with mlflow.start_run(run_name="sgd_classifier"):
         mlflow.log_param("model", "SGDClassifier")
-        mlflow.log_param("max_features", max_features)
+        mlflow.log_param("max_features", MAX_FEATURES)
         mlflow.log_param("loss", "hinge")
         mlflow.log_param("class_weight", "balanced")
 
         pipeline = Pipeline([
-            ("tfidf", TfidfVectorizer(max_features=max_features)),
+            ("tfidf", TfidfVectorizer(max_features=MAX_FEATURES)),
             ("clf", SGDClassifier(loss="hinge", class_weight="balanced", random_state=42, n_jobs=-1))
         ])
 
@@ -92,7 +101,7 @@ def train_sentiment_sgd(train_df, val_df, max_features=5000):
     return pipeline
 
 
-def train_response_time_ridge(train_df, val_df, max_features=5000, alpha=1.0):
+def train_response_time_ridge(train_df, val_df):
     X_train = train_df["customer_text_clean"].fillna("").astype(str)
     X_val = val_df["customer_text_clean"].fillna("").astype(str)
     y_train = train_df["response_time_log"]
@@ -100,13 +109,13 @@ def train_response_time_ridge(train_df, val_df, max_features=5000, alpha=1.0):
 
     with mlflow.start_run(run_name="ridge_regression_baseline"):
         mlflow.log_param("model", "Ridge")
-        mlflow.log_param("max_features", max_features)
-        mlflow.log_param("alpha", alpha)
+        mlflow.log_param("max_features", MAX_FEATURES)
+        mlflow.log_param("alpha", ALPHA)
         mlflow.log_param("target", "response_time_log")
 
         pipeline = Pipeline([
-            ("tfidf", TfidfVectorizer(max_features=max_features)),
-            ("reg", Ridge(alpha=alpha))
+            ("tfidf", TfidfVectorizer(max_features=MAX_FEATURES)),
+            ("reg", Ridge(alpha=ALPHA))
         ])
 
         pipeline.fit(X_train, y_train)
@@ -126,7 +135,7 @@ def train_response_time_ridge(train_df, val_df, max_features=5000, alpha=1.0):
     return pipeline
 
 
-def train_response_time_ridge_onehot(train_df, val_df, max_features=5000, alpha=1.0):
+def train_response_time_ridge_onehot(train_df, val_df):
     y_train = train_df["response_time_log"]
     y_val = val_df["response_time_log"]
 
@@ -134,7 +143,7 @@ def train_response_time_ridge_onehot(train_df, val_df, max_features=5000, alpha=
     train_company = ohe.fit_transform(train_df[["company_name"]].fillna("unknown"))
     val_company = ohe.transform(val_df[["company_name"]].fillna("unknown"))
 
-    tfidf = TfidfVectorizer(max_features=max_features)
+    tfidf = TfidfVectorizer(max_features=MAX_FEATURES)
     X_train_text = tfidf.fit_transform(train_df["customer_text_clean"].fillna("").astype(str))
     X_val_text = tfidf.transform(val_df["customer_text_clean"].fillna("").astype(str))
 
@@ -147,9 +156,9 @@ def train_response_time_ridge_onehot(train_df, val_df, max_features=5000, alpha=
     with mlflow.start_run(run_name="ridge_onehot_company"):
         mlflow.log_param("model", "Ridge")
         mlflow.log_param("features", "text + onehot_company + hour + is_weekend")
-        mlflow.log_param("alpha", alpha)
+        mlflow.log_param("alpha", ALPHA)
 
-        reg = Ridge(alpha=alpha)
+        reg = Ridge(alpha=ALPHA)
         reg.fit(X_train, y_train)
         y_pred = reg.predict(X_val)
 
@@ -168,10 +177,13 @@ def train_response_time_ridge_onehot(train_df, val_df, max_features=5000, alpha=
 
 
 if __name__ == "__main__":
-    mlflow.set_tracking_uri("sqlite:///notebooks/mlruns.db")
-    mlflow.set_experiment("customer-support-intelligence")
+    mlflow.set_tracking_uri(TRACKING_URI)
+    mlflow.set_experiment(EXPERIMENT_NAME)
 
-    train_df, val_df = load_data("data/processed/train.csv", "data/processed/val.csv")
+    train_df, val_df = load_data(
+        config["data"]["processed_dir"] + "/train.csv",
+        config["data"]["processed_dir"] + "/val.csv"
+    )
 
     train_sentiment_lr(train_df, val_df)
     train_sentiment_sgd(train_df, val_df)

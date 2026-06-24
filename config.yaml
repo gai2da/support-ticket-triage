@@ -1,13 +1,29 @@
 data:
-  raw_path: data/raw/customer_support_tickets.csv
-  test_size: 0.2
+  raw_path: data/raw/twcs.csv
+  merged_path: data/raw/merged_with_text.csv
+  processed_dir: data/processed
+  models_dir: models
+
+preprocessing:
+  response_time_cap: 500
+  sentiment_threshold: -0.3
+  test_size: 0.3
+  val_size: 0.5
   random_state: 42
 
 model:
-  n_estimators: 100
-  max_depth: 10
-  random_state: 42
+  classification:
+    max_features: 5000
+    C: 1.0
+    class_weight: balanced
+  regression:
+    max_features: 5000
+    alpha: 1.0
 
 mlflow:
-  experiment_name: support-ticket-triage
-  tracking_uri: mlruns
+  tracking_uri: sqlite:///notebooks/mlruns.db
+  experiment_name: customer-support-intelligence
+
+api:
+  overall_median_response: 21.1
+  max_tweet_length: 560
