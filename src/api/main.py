@@ -1,9 +1,15 @@
-import json
 import re
-import pickle
+import joblib
 import numpy as np
+import yaml
+from typing import List
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from scipy.sparse import hstack, csr_matrix
+from src.data.preprocessing import clean_text, extract_company, extract_hour, extract_is_weekend
+
+with open("config.yaml") as f:
+    config = yaml.safe_load(f)
 
 app = FastAPI(
     title="Customer Support Intelligence API",
@@ -11,18 +17,20 @@ app = FastAPI(
     version="1.0.0"
 )
 
-with open("data/processed/company_medians.json", "r") as f:
-    COMPANY_MEDIANS = json.load(f)
+sentiment_model = joblib.load("models/sentiment_model.joblib")
+regression_artifacts = joblib.load("models/regression_model.joblib")
+reg_model = regression_artifacts["model"]
+reg_tfidf = regression_artifacts["tfidf"]
+reg_ohe = regression_artifacts["ohe"]
 
-with open("models/sentiment_model.pkl", "rb") as f:
-    sentiment_model = pickle.load(f)
-
-OVERALL_MEDIAN = 21.1
+OVERALL_MEDIAN = config["api"]["overall_median_response"]
+MAX_TWEET_LENGTH = config["api"]["max_tweet_length"]
 
 
 class TweetRequest(BaseModel):
     text: str
-    company: str = "unknown"
+    company: str = ""
+    timestamp: str = ""
 
 
 class PredictionResponse(BaseModel):
@@ -30,17 +38,12 @@ class PredictionResponse(BaseModel):
     estimated_response_mins: float
     estimated_response_label: str
     company: str
+    hour: int
+    is_weekend: int
 
 
-def clean_text(text: str) -> str:
-    text = re.sub(r'@\w+', '', str(text))
-    text = re.sub(r'http\S+', '', text)
-    text = re.sub(r'[^\w\s!?]', '', text)
-    return text.lower().strip()
-
-
-def estimate_response_time(company: str) -> float:
-    return COMPANY_MEDIANS.get(company, OVERALL_MEDIAN)
+class BatchRequest(BaseModel):
+    tweets: List[TweetRequest]
 
 
 def response_label(mins: float) -> str:
@@ -54,12 +57,40 @@ def response_label(mins: float) -> str:
         return "Slow (over 3 hours)"
 
 
+def predict_single(text: str, company: str = "", timestamp: str = "") -> dict:
+    company = company or extract_company(text)
+    hour = extract_hour(timestamp)
+    is_weekend = extract_is_weekend(timestamp)
+    cleaned = clean_text(text)
+
+    sentiment = sentiment_model.predict([cleaned])[0]
+
+    text_features = reg_tfidf.transform([cleaned])
+    company_features = reg_ohe.transform([[company]])
+    extra_features = csr_matrix([[hour, is_weekend]])
+    combined = hstack([text_features, company_features, extra_features])
+
+    response_log = reg_model.predict(combined)[0]
+    response_mins = float(np.expm1(response_log))
+    response_mins = max(0, min(response_mins, 500))
+
+    return {
+        "sentiment": sentiment,
+        "estimated_response_mins": round(response_mins, 1),
+        "estimated_response_label": response_label(response_mins),
+        "company": company,
+        "hour": hour,
+        "is_weekend": is_weekend
+    }
+
+
 @app.get("/")
 def root():
     return {
         "message": "Customer Support Intelligence API",
         "endpoints": {
-            "/predict": "POST — predict sentiment and response time",
+            "/predict": "POST — predict single tweet",
+            "/predict/batch": "POST — predict batch of tweets",
             "/health": "GET — health check",
             "/docs": "GET — interactive API docs"
         }
@@ -75,18 +106,15 @@ def health():
 def predict(request: TweetRequest):
     if not request.text or len(request.text.strip()) == 0:
         raise HTTPException(status_code=400, detail="Tweet text cannot be empty")
+    if len(request.text) > MAX_TWEET_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Tweet text too long (max {MAX_TWEET_LENGTH} characters)")
+    return predict_single(request.text, request.company, request.timestamp)
 
-    if len(request.text) > 560:
-        raise HTTPException(status_code=400, detail="Tweet text too long (max 560 characters)")
 
-    cleaned = clean_text(request.text)
-    sentiment = sentiment_model.predict([cleaned])[0]
-    response_mins = estimate_response_time(request.company)
-    label = response_label(response_mins)
-
-    return PredictionResponse(
-        sentiment=sentiment,
-        estimated_response_mins=response_mins,
-        estimated_response_label=label,
-        company=request.company
-    )
+@app.post("/predict/batch")
+def predict_batch(request: BatchRequest):
+    if len(request.tweets) == 0:
+        raise HTTPException(status_code=400, detail="No tweets provided")
+    if len(request.tweets) > 1000:
+        raise HTTPException(status_code=400, detail="Max 1000 tweets per batch")
+    return [predict_single(t.text, t.company, t.timestamp) for t in request.tweets]
