@@ -9,7 +9,10 @@ RUN pip install uv
 RUN uv sync --frozen
 
 COPY src/ src/
+COPY config.yaml .
 COPY data/processed/company_medians.json data/processed/company_medians.json
+COPY models/sentiment_model.joblib models/sentiment_model.joblib
+COPY models/regression_model.pkl models/regression_model.pkl
 
 EXPOSE 8000
 
