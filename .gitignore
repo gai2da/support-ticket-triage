@@ -1,11 +1,12 @@
-data/
+/data/
 .venv/
 __pycache__/
 *.pkl
 .DS_Store
 mlruns/
 *.egg-info/
-.envmlruns.db
+.env
+mlruns.db
 notebooks/eda copy.ipynb
 notebooks/.ipynb_checkpoints
 notebooks/modelinsg.ipynb
