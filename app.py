@@ -9,7 +9,7 @@ st.set_page_config(
 )
 
 st.title("Support Intelligence Platform")
-st.caption("Real-time sentiment triage and response time prediction for customer support operations.")
+st.caption("Real-time sentiment triage, response time prediction, and complaint topic discovery.")
 
 PRIORITY_MAP = {
     "negative": "URGENT",
@@ -50,8 +50,7 @@ with tab1:
 
                     st.divider()
 
-                    col1, col2, col3, col4 = st.columns(4)
-
+                    col1, col2, col3 = st.columns(3)
                     priority = PRIORITY_MAP[result["sentiment"]]
 
                     with col1:
@@ -66,12 +65,8 @@ with tab1:
                         st.caption(result["estimated_response_label"])
 
                     with col3:
-                        st.metric("Company", result["company"])
-                        st.caption("Extracted from mention")
-
-                    with col4:
-                        st.metric("Tweet Hour", f"{result['hour']}:00")
-                        st.caption("Weekend" if result["is_weekend"] else "Weekday")
+                        st.metric("Complaint Topic", result["topic_name"])
+                        st.caption(f"Company: {result['company']} | Hour: {result['hour']}:00 | {'Weekend' if result['is_weekend'] else 'Weekday'}")
 
                 except requests.exceptions.ConnectionError:
                     st.error("Cannot connect to API. Make sure the server is running on http://localhost:8000")
@@ -114,7 +109,6 @@ with tab2:
                     results = response.json()
 
                     results_df = pd.DataFrame(results)
-
                     results_df["actual_sentiment_raw"] = df["sentiment"].values[:len(results)]
                     results_df["actual_priority"] = df["sentiment"].map(PRIORITY_MAP).values[:len(results)]
                     results_df["actual_response_mins"] = df["response_time_capped"].values[:len(results)]
@@ -133,16 +127,18 @@ with tab2:
                     col3.metric("Response Time MAE", f"{results_df['response_error_mins'].mean():.0f} min")
                     col4.metric("Urgent Flagged", f"{(results_df['sentiment']=='negative').sum():,}")
 
+                    st.divider()
+                    st.subheader("Topic Distribution")
+                    topic_counts = results_df["topic_name"].value_counts()
+                    st.bar_chart(topic_counts)
+
+                    st.divider()
                     st.subheader("Predictions")
                     st.dataframe(
                         results_df[[
-                            "priority",
-                            "actual_priority",
-                            "sentiment_correct",
-                            "estimated_response_mins",
-                            "actual_response_mins",
-                            "response_error_mins",
-                            "company"
+                            "priority", "actual_priority", "sentiment_correct",
+                            "estimated_response_mins", "actual_response_mins",
+                            "response_error_mins", "topic_name", "company"
                         ]].rename(columns={
                             "priority": "Predicted Priority",
                             "actual_priority": "Actual Priority",
@@ -150,19 +146,14 @@ with tab2:
                             "estimated_response_mins": "Predicted Response (min)",
                             "actual_response_mins": "Actual Response (min)",
                             "response_error_mins": "Error (min)",
+                            "topic_name": "Complaint Topic",
                             "company": "Company"
                         }),
                         use_container_width=True
                     )
 
                     csv = results_df.to_csv(index=False)
-                    st.download_button(
-                        "Export Results",
-                        csv,
-                        "evaluation_results.csv",
-                        "text/csv",
-                        use_container_width=True
-                    )
+                    st.download_button("Export Results", csv, "evaluation_results.csv", "text/csv", use_container_width=True)
 
                 except requests.exceptions.ConnectionError:
                     st.error("Cannot connect to API. Make sure the server is running on http://localhost:8000")
