@@ -5,14 +5,15 @@ WORKDIR /app
 COPY pyproject.toml .
 COPY uv.lock .
 
-RUN pip install uv
-RUN uv sync --frozen
+RUN pip install uv && uv sync --frozen && apt-get update && apt-get install -y curl --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 COPY src/ src/
 COPY config.yaml .
 COPY data/processed/company_medians.json data/processed/company_medians.json
 COPY models/sentiment_model.joblib models/sentiment_model.joblib
-COPY models/regression_model.pkl models/regression_model.pkl
+COPY models/regression_model.joblib models/regression_model.joblib
+COPY models/lda_model.joblib models/lda_model.joblib
+COPY models/lda_tfidf.joblib models/lda_tfidf.joblib
 
 EXPOSE 8000
 

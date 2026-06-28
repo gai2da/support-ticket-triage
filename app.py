@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import requests
 import pandas as pd
@@ -7,6 +8,8 @@ st.set_page_config(
     page_title="Support Intelligence Platform",
     layout="wide"
 )
+
+API_URL = os.getenv("API_URL", "http://localhost:8000")
 
 st.title("Support Intelligence Platform")
 st.caption("Real-time sentiment triage, response time prediction, and complaint topic discovery.")
@@ -43,7 +46,7 @@ with tab1:
                 try:
                     timestamp = f"{tweet_date} {tweet_time}"
                     response = requests.post(
-                        "http://localhost:8000/predict",
+                        f"{API_URL}/predict",
                         json={"text": tweet, "timestamp": timestamp}
                     )
                     result = response.json()
@@ -69,7 +72,7 @@ with tab1:
                         st.caption(f"Company: {result['company']} | Hour: {result['hour']}:00 | {'Weekend' if result['is_weekend'] else 'Weekday'}")
 
                 except requests.exceptions.ConnectionError:
-                    st.error("Cannot connect to API. Make sure the server is running on http://localhost:8000")
+                    st.error(f"Cannot connect to API at {API_URL}")
                 except Exception as e:
                     st.error(f"Unexpected error: {e}")
 
@@ -103,7 +106,7 @@ with tab2:
                     ]
 
                     response = requests.post(
-                        "http://localhost:8000/predict/batch",
+                        f"{API_URL}/predict/batch",
                         json={"tweets": tweets}
                     )
                     results = response.json()
@@ -156,6 +159,6 @@ with tab2:
                     st.download_button("Export Results", csv, "evaluation_results.csv", "text/csv", use_container_width=True)
 
                 except requests.exceptions.ConnectionError:
-                    st.error("Cannot connect to API. Make sure the server is running on http://localhost:8000")
+                    st.error(f"Cannot connect to API at {API_URL}")
                 except Exception as e:
                     st.error(f"Unexpected error: {e}")

@@ -1,0 +1,12 @@
+.venv
+.git
+data/raw
+data/processed/*.csv
+notebooks
+*.pkl
+.DS_Store
+__pycache__
+*.pyc
+mlruns
+mlruns.db
+tests

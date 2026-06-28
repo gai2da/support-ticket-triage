@@ -1,110 +1,159 @@
 # Customer Support Intelligence Platform
- 
-An end-to-end machine learning project that analyzes customer support conversations and generates operational insights for customer service teams.
- 
-## Problem Statement
- 
-Organizations receive a large volume of customer support requests through social media and digital channels. Understanding customer concerns, identifying recurring issues, and monitoring support performance is difficult to do manually at scale.
- 
-This project explores how machine learning can be used to analyze real customer support interactions and support data-driven decision-making in support operations.
- 
-## Objectives
- 
-- Predict expected response time for incoming customer requests
-- Discover common complaint categories through unsupervised clustering
-- Analyze customer sentiment and interaction patterns
-- Generate actionable insights about support performance across companies and issue types
+
+An end-to-end MLOps project that analyzes 2.8M real customer support conversations from Twitter, turning raw interaction data into operational intelligence for support teams.
+
+## What It Does
+
+Given a customer tweet, the platform predicts:
+- **Priority** — urgent or standard (sentiment classification)
+- **Estimated response time** — in minutes, based on company and time of day
+- **Complaint topic** — one of 10 discovered categories (delivery, billing, iOS issues, travel delays, etc.)
+
+A live Streamlit UI and a REST API make it usable in real time or at scale via batch evaluation.
+
 ## Dataset
- 
-**Twitter Customer Support Dataset (Kaggle)** — 2.8M real customer-company conversations from Twitter, including customer messages, company responses, and conversation timestamps.
- 
-Additional preprocessing was applied to pair customer messages with company replies and engineer response time metrics.
- 
- 
-## Key Findings from EDA
- 
-- Companies respond to 82% of customer tweets; median response time is 21 minutes
-- Financial companies (Visa, PayPal) are significantly slower than tech companies
-- Tweet activity peaks 3pm–7pm on weekdays — useful for staffing and resource planning
-- Tweet length jumped after Twitter raised the character limit to 280 in Nov 2017 — visible in the data
-- Tweet length has near-zero correlation with response time — not a useful feature
-## Machine Learning Tasks
- 
-### Regression
-Predict expected response time for a customer request.
-- Target: `response_time_mins`
-- Models: Linear Regression, Random Forest Regressor, Gradient Boosting
-### Clustering
-Group customer complaints into common issue categories without manual labeling.
-- Approach: TF-IDF + K-Means
-### Sentiment Analysis
-Analyze customer sentiment and its relationship with response behavior and company performance.
- 
-## MLOps Components
- 
-- Git and GitHub — version control from day one
-- uv — environment and dependency management
-- MLflow — experiment tracking, model registry, and versioning
-- Configuration management — hyperparameters and paths in config files
-- FastAPI — prediction endpoint
-- Docker — containerized deployment
-- Model card — documented limitations and intended use
+
+**Twitter Customer Support Dataset** — 2.8M tweets from 108 companies (Oct–Dec 2017), sourced from Kaggle. Customer messages were paired with company replies and engineered into conversation-level features including response time, time of day, and company identity.
+
+## Key Findings
+
+- 82% of customer tweets received a company reply — median response time 21 minutes
+- Financial companies (Visa, SC Support) are 10–20x slower than tech companies (Postmates, TMobile)
+- Tweet activity peaks 3–7pm on weekdays — useful for staffing decisions
+- Tweet length has near-zero correlation with response time — ruled out as a useful feature
+- 7.3% of tweets are non-English (Spanish, French, Japanese, Portuguese, Italian) — discovered through LDA topic modeling
+
+## ML Tasks   
+
+### Classification — Sentiment Triage
+Predict whether a customer tweet is negative (urgent) or non-negative (standard).
+
+| Model | Accuracy | F1 (negative) |
+|---|---|---|
+| Logistic Regression | 87.9% | 0.771 |
+| SGD Classifier | 86.1% | 0.734 |
+
+Winner: Logistic Regression — higher recall on the negative class (0.87), catching 87% of unhappy customers.
+
+### Regression — Response Time Prediction
+Predict how long a company will take to respond, in minutes.
+
+| Model | R² | MAE |
+|---|---|---|
+| Ridge — text only | 0.176 | 89.6 mins |
+| Ridge — text + label encoded company | 0.182 | 89.3 mins |
+| Ridge — text + one-hot company + hour | **0.445** | **77.7 mins** |
+
+Key insight: company identity is the strongest predictor of response time — more than the tweet content itself.
+
+### Clustering — Complaint Topic Discovery
+Discover recurring complaint categories without manual labeling.
+
+Compared KMeans and LDA on TF-IDF representations. KMeans produced weak clusters (silhouette 0.011–0.017) with one cluster capturing 63% of data. LDA discovered 10 meaningful topics:
+
+- iOS/iPhone Issues
+- Billing & Account
+- Delivery & Orders
+- Travel Delays (flights, trains)
+- Internet & Network Outages
+- App & Streaming
+- Gaming & Online Shopping
+- Rideshare
+- Service Quality Complaints
+- Support Response Quality
+
+A multilingual proof of concept was also implemented — detecting and translating non-English tweets (Spanish, French, Japanese, Portuguese, German) before clustering, removing language noise from topic discovery.
+
+## Stack
+
+| Component | Tool |
+|---|---|
+| Environment | uv |
+| Experiment tracking | MLflow |
+| API | FastAPI |
+| UI | Streamlit |
+| Containerization | Docker + Docker Compose |
+| Version control | Git + GitHub |
+| Config management | config.yaml |
+
 ## Project Structure
- 
+
 ```
-notebooks/        # EDA and experimentation
+notebooks/          # EDA, preprocessing, modeling, clustering
 src/
-  data/           # data loading and preprocessing
-  features/       # feature engineering
-  models/         # model training and evaluation
-  api/            # FastAPI endpoint
-  utils/          # shared utilities
-data/raw/         # raw data (gitignored)
-tests/            # unit tests
-config.yaml       # hyperparameters and paths
+  data/             # preprocessing pipeline
+  models/           # training logic
+  api/              # FastAPI endpoint
+data/
+  raw/              # raw data (gitignored)
+  processed/        # train/val/test splits, artifacts
+models/             # saved joblib models
+config.yaml         # hyperparameters and paths
+Dockerfile          # API container
+Dockerfile.ui       # Streamlit container
+docker-compose.yml  # full stack deployment
 ```
- 
+
 ## Setup
- 
+
 ```bash
 git clone <repo-url>
 cd support-ticket-triage
 uv sync
 ```
- 
 
-## Run API
- 
+## Run Locally
+
 ```bash
+# API
 uv run uvicorn src.api.main:app --reload
+
+# UI (new terminal)
+uv run streamlit run app.py
+
+# MLflow UI
+uv run mlflow ui --backend-store-uri sqlite:///notebooks/mlruns.db
 ```
 
-## Docker
+## Run with Docker
 
 ```bash
+# Full stack — API + UI
+docker-compose up --build
+
+# API only
 docker build -t support-triage .
 docker run -p 8000:8000 support-triage
 ```
- 
+
+API available at `http://localhost:8000` — interactive docs at `http://localhost:8000/docs`
+UI available at `http://localhost:8501`
+
+## API
+
+```bash
+# Single prediction
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"text": "@AmazonHelp my package never arrived", "timestamp": "2017-10-31 14:00:00"}'
+
+# Batch prediction (up to 1000 tweets)
+curl -X POST http://localhost:8000/predict/batch \
+  -H "Content-Type: application/json" \
+  -d '{"tweets": [{"text": "@AppleSupport my phone is broken"}]}'
+```
+
 ## Milestones
- 
-- [x] Environment setup — repo, virtual environment, dependencies pinned
+
+- [x] Environment setup — repo, uv, dependencies pinned
 - [x] EDA — data quality, distributions, response time analysis, text exploration
-- [ ] Feature engineering pipeline
-- [ ] Baseline model + problem framing
-- [ ] Model comparison with MLflow tracking
-- [ ] Notebook → .py modules
-- [ ] Config and reproducibility
-- [ ] FastAPI /predict endpoint
-- [ ] Docker deployment
-- [ ] Model registry and model card
+- [x] Feature engineering pipeline — time features, text cleaning, sentiment labels, response time transform
+- [x] Baseline model + problem framing
+- [x] Model comparison with MLflow tracking — 5 models across 3 tasks
+- [x] Notebook → .py modules — preprocessing.py, train.py
+- [x] Config and reproducibility — config.yaml
+- [x] FastAPI /predict endpoint — single + batch
+- [x] Docker deployment — Dockerfile + Docker Compose
+- [x] Model registry — MLflow model registry
+- [ ] Model card
 - [ ] Final demo and retrospective
-## Expected Business Value
- 
-The platform can help organizations:
- 
-- Monitor customer support performance across channels and teams
-- Identify recurring customer issues before they escalate
-- Estimate support workload and predict response behavior
-- Benchmark support performance against industry peers
-- Make data-driven decisions about staffing and prioritization
